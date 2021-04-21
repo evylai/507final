@@ -526,6 +526,7 @@ if __name__ == "__main__":
         if not access_token or not access_token_secret:
             print("You need to fill in ACCESS_TOKEN and ACCESS_TOKEN_SECRET in secret_data.py.")
             exit()
+        print("---------------------------------------")
         term = input(f"Enter a number for more info, or another search term, or exit: ")
         if term == 'exit':
             print("Bye!")
@@ -540,9 +541,7 @@ if __name__ == "__main__":
                 hashtag = f"#{song_name.replace(' ','')}"
                 count = 20
                 tweet_data = make_request_with_cache(baseurl, hashtag, count)
-                print(tweet_data)
                 cooccurring_hashtag = find_cooccurring_hashtag(tweet_data)
-                print(cooccurring_hashtag)
                 if bool(cooccurring_hashtag) is False:
                     print(f"No twitter hashtag data related to the song.")
                     pass
@@ -551,6 +550,7 @@ if __name__ == "__main__":
                     pass
                 else:
                     while True:
+                        print("---------------------------------------")
                         option = input(f"Do you want to see the 1.wordcloud or 2.barchart for the twitter result, or 3.to go back? (please key in 1, 2, 3): ")
                         if option == "1":
                             print(f"Showing the wordcloud...")
