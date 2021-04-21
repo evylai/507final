@@ -6,6 +6,7 @@
 from requests_oauthlib import OAuth1
 import json
 import requests
+import sqlite3
 import base64
 import datetime
 import webbrowser
@@ -127,7 +128,7 @@ class SpotifyAPI(object):
         data = urlencode({
             "q": query.lower(),
             "type": search_type.lower(),
-            "limit": 3
+            "limit": 10
         })
         lookup_url = f"{endpoint}?{data}"
         # print(lookup_url)
@@ -137,7 +138,104 @@ class SpotifyAPI(object):
             return {}
         return r.json()["tracks"]["items"]
 
-def sort_list(search_results):
+DBNAME = "spotify.db"
+conn = sqlite3.connect(DBNAME)
+cur = conn.cursor()
+statement = '''
+    DROP TABLE IF EXISTS 'Track_info';
+'''
+cur.execute(statement)
+
+statement = '''
+    DROP TABLE IF EXISTS 'Track_more';
+'''
+cur.execute(statement)
+
+#Creating the table "Track_info"
+statement = '''
+    CREATE TABLE "Track_info" (
+        "Id"	INTEGER UNIQUE,
+        "Track"	TEXT NOT NULL,
+        "Artist"	TEXT NOT NULL,
+        "Album"	TEXT NOT NULL,
+        PRIMARY KEY("Id" AUTOINCREMENT)
+    );
+'''
+cur.execute(statement)
+conn.commit()
+
+#Creating the table "Track_more"
+statement = '''
+    CREATE TABLE "Track_more" (
+        "Id"	INTEGER UNIQUE,
+        "Track"	TEXT NOT NULL,
+        "Url"	TEXT NOT NULL,
+        "Popularity"	INTEGER NOT NULL,
+        PRIMARY KEY("Id" AUTOINCREMENT)
+    );
+'''
+cur.execute(statement)
+conn.commit()
+
+def add_db_info(track, artist, album):
+    '''
+    Insert the result from API to database
+
+    Parameters
+    ---------------------
+    track
+        str track name
+    artist
+        str artist of the track
+    album
+        str album of the track
+    '''
+    statement = "INSERT INTO Track_info ('Track','Artist', 'Album') VALUES (?,?,?)"
+    cur.execute(statement, (track, artist, album))
+    conn.commit()
+
+def add_db_more(track, url, popularity):
+    '''
+    Insert the result from API to database
+
+    Parameters
+    ---------------------
+    track
+        str track name
+    url
+        str url of the track
+    popularity
+        int the poplularity of the track
+    '''
+    statement = "INSERT INTO Track_more ('Track','Url', 'Popularity') VALUES (?,?,?)"
+    cur.execute(statement, (track, url, popularity))
+    conn.commit()
+
+# conn.close()
+
+def search_db_info(search_results):
+    '''
+    Find the song name, artist, album, and url from the database
+
+    Parameters
+    ------------------------
+    search_results
+        searching result from the database
+
+    Results
+    ------------------------
+    lists
+        a list of tuples that represent the query result
+    '''
+    connection = sqlite3.connect(DBNAME)
+    cursor = connection.cursor()
+    query = f"SELECT * FROM Track_info JOIN Track_more ON Track_info.Track = Track_more.Track WHERE LOWER(Track_info.Track) LIKE '%{search_results.lower()}%' ORDER BY Track_more.Popularity DESC LIMIT 20"
+    result = cursor.execute(query).fetchall()
+    connection.close()
+    return result
+
+
+def search_api(search_results):
     '''
     Find the song name, artist, album, and url from the json file
 
@@ -145,17 +243,8 @@ def sort_list(search_results):
     ------------------------
     json file
         searching result from the spotify API
-
-    Results
-    ------------------------
-    lists
-        a list of the track, a list of the url, and a list of song name
     '''
-
     print_song_name = []
-    print_track_list = []
-    print_url_list = []
-    print_popularity = []
     for result in search:
         try:
             song = result["name"]
@@ -167,12 +256,68 @@ def sort_list(search_results):
             artist = "N/A"
             album = "N/A"
             url = "N/A"
-        print_track_list.append(f"'{song}' by {artist} - {album}")
-        print_url_list.append(url)
+        add_db_info(song, artist, album)
+        add_db_more(song, url, popularity)
         print_song_name.append(song)
-        print_popularity.append(popularity)
-    return print_track_list, print_url_list, print_song_name, print_popularity
-        
+    return print_song_name
+
+def sort_list(result_list):
+    '''
+    Change the searching result from db to the print statement
+
+    Parameters
+    ------------------
+    result_list
+        a list of searching result
+
+    Return
+    ------------------
+    print_track_list
+        list of f string - searching result
+    '''
+    print_track_list = []
+    for result in result_list:
+        try:
+            song = result[1]
+            artist = result[2]
+            album = result[3]
+        except:
+            artist = "N/A"
+            album = "N/A"
+        print_track_list.append(f"'{song}' by {artist} - {album}")
+    return print_track_list
+
+def sort_name(result_list):
+    print_name = []
+    for result in result_list:
+        song = result[1]
+        print_name.append(song)
+    return print_name
+
+def sort_list_more(result_list):
+    '''
+    Change the searching result from db to the print statement
+
+    Parameters
+    ------------------
+    result_list
+        a list of searching result
+
+    Return
+    ------------------
+    print_url
+        list of url of the track
+    '''
+    print_url = []
+    for result in result_list:
+        try:
+            url = result[6]
+        except:
+            url = "N/A"
+        print_url.append(url)
+    return print_url
+
+
 def test_oauth():
     ''' Helper function that returns an HTTP 200 OK response code and a 
     representation of the requesting user if authentication was 
@@ -347,51 +492,27 @@ def find_cooccurring_hashtag(tweet_data):
     
     return hashtags_dict
 
-def tweetSearch(query, limit = 20, language = "en", remove = []):
-    '''
-    User the query (user input) to search for a text of most freguently mentioned words related to the hashtag
-
-    Parameters
-    -------------------
-    str
-        user input searching keyword
-    int
-        the limitation of the related words
-    
-    Results
-    -------------------
-    str
-        most frequently mentioned words realted to the query
-    '''
-    text = ""
-    for tweet in tweepy.Cursor(api.search, q=query, lang=language).items(limit):
-        text += tweet.text.lower()
-
-    remove_words = ["https","co"]
-    remove_words += remove
-
-    for word in remove_words:
-        text = text.replace(word, "")
-    return text
 
 
 if __name__ == "__main__":
+    history = []
     keyword = input(f"Enter a search track, or 'exit' to quit: ")
+    history.append(keyword)
     if keyword == 'exit':
         print("Bye!")
         quit()
     else:
         spotify = SpotifyAPI(client_key_s, client_secret_s)
         search = spotify.search(keyword)
-        results = sort_list(search)[0]
-        urls = sort_list(search)[1]
-        popularity = sort_list(search)[3]
-        i = 1
+        songs = search_api(search)
+        result = search_db_info(keyword)
+        results = sort_list(result)
+        song = sort_name(result)
+        urls = sort_list_more(result)
+        i=1
         for result in results:
             print(f"[{i}] {result}")
             i+=1
-        for item in urls:
-            print(item)
 
 
     while True:
@@ -405,44 +526,61 @@ if __name__ == "__main__":
         if term == 'exit':
             print("Bye!")
             quit()
-        else:
-            if term.isnumeric() and int(term) <= len(results):
+        elif term.isnumeric() and int(term) <= len(results):
                 num = int(term)
-                print(f"Launching {results[num-1]} in web browser...")
+                print(f"Launching {song[num-1]} in web browser...")
                 webbrowser.open(urls[num-1])
                 CACHE_DICT = open_cache()
                 baseurl = "https://api.twitter.com/1.1/search/tweets.json"
-                song_name = sort_list(search)[2][num-1].lower()
+                song_name = song[num-1].lower()
                 hashtag = f"#{song_name.replace(' ','')}"
                 count = 20
                 tweet_data = make_request_with_cache(baseurl, hashtag, count)
                 cooccurring_hashtag = find_cooccurring_hashtag(tweet_data)
-                # print(cooccurring_hashtag)
-                twitter_search = tweetSearch(song_name)
-                while True:
-                    option = input(f"Do you want to see the wordcloud or barchart for the twitter result, or type new to start a new search? (please key in wordcloud, barchart, new): ")
-                    if option == "wordcloud":
-                        print(f"Showing the wordcloud...")
-                        wordcloud = WordCloud(width = 1000, height = 500).generate_from_frequencies(cooccurring_hashtag)
-                        plt.figure(figsize=(15,8))
-                        plt.imshow(wordcloud)
-                        plt.show()
+                if bool(cooccurring_hashtag) is False:
+                    print(f"No twitter data related to the song.")
+                    pass
+                else:
+                    while True:
+                        option = input(f"Do you want to see the 1.wordcloud or 2.barchart for the twitter result, or 3.to go back? (please key in 1, 2, 3): ")
+                        if option == "1":
+                            print(f"Showing the wordcloud...")
+                            wordcloud = WordCloud(width = 1000, height = 500).generate_from_frequencies(cooccurring_hashtag)
+                            plt.figure(figsize=(15,8))
+                            plt.imshow(wordcloud)
+                            plt.show()
+                            pass
+                        elif option == "2":
+                            print(f"Showing the bar chart...")
+                            keys = cooccurring_hashtag.keys()
+                            values = cooccurring_hashtag.values()
+                            plt.bar(keys, values)
+                            plt.show()
+                            pass
+                        elif option == "3":
+                            break
+                        else:
+                            print(f"Wrong key word, please type wordcloud or barchart")
                         pass
-                    elif option == "barchart":
-                        print(f"Showing the bar chart...")
-                        pass
-                    elif option == "new":
-                        break
-                    else:
-                        print(f"Wrong key word, please type wordcloud or barchart")
-                        pass
-            else:
-                results.clear()
-                spotify = SpotifyAPI(client_key_s, client_secret_s)
-                search = spotify.search(term)
-                results = sort_list(search)[0]
-                urls = sort_list(search)[1]
-                i = 1
-                for result in results:
-                    print(f"[{i}] {result}")
-                    i+=1
+        elif term in history:
+            result = search_db_info(term)
+            results = sort_list(result)
+            song = sort_name(result)
+            urls = sort_list_more(result)
+            i=1
+            for result in results:
+                print(f"[{i}] {result}")
+                i+=1
+        else:
+            spotify = SpotifyAPI(client_key_s, client_secret_s)
+            search = spotify.search(term)
+            songs = search_api(search)
+            result = search_db_info(term)
+            results = sort_list(result)
+            song = sort_name(result)
+            urls = sort_list_more(result)
+            i=1
+            for result in results:
+                print(f"[{i}] {result}")
+                i+=1
+            history.append(term)
