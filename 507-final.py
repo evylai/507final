@@ -482,15 +482,19 @@ def find_cooccurring_hashtag(tweet_data):
     '''
 
     hashtags_dict={}
-    for dictionary in tweet_data:
-        for item in dictionary["entities"]["hashtags"]:
-            tag = item["text"].lower()
-            if tag in hashtags_dict:
-                hashtags_dict[tag] += 1
-            else:
-                hashtags_dict[tag] = 1
+    try:
+        for dictionary in tweet_data:
+            for item in dictionary["entities"]["hashtags"]:
+                tag = item["text"].lower()
+                if tag in hashtags_dict:
+                    hashtags_dict[tag] += 1
+                else:
+                    hashtags_dict[tag] = 1
+        return hashtags_dict
     
-    return hashtags_dict
+    except:
+        return f"No twitter data."
+
 
 
 
@@ -536,9 +540,14 @@ if __name__ == "__main__":
                 hashtag = f"#{song_name.replace(' ','')}"
                 count = 20
                 tweet_data = make_request_with_cache(baseurl, hashtag, count)
+                print(tweet_data)
                 cooccurring_hashtag = find_cooccurring_hashtag(tweet_data)
+                print(cooccurring_hashtag)
                 if bool(cooccurring_hashtag) is False:
-                    print(f"No twitter data related to the song.")
+                    print(f"No twitter hashtag data related to the song.")
+                    pass
+                elif cooccurring_hashtag == "No twitter data.":
+                    print("No twitter hashtag data related to the song.")
                     pass
                 else:
                     while True:
