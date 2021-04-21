@@ -1,5 +1,6 @@
 __pycache__
 secret_key.py
+twitter_cache.json
 
 secret_key.py
 __pycache__/secret_key.cpython-38.pyc
